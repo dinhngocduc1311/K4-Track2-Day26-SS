@@ -1,0 +1,4 @@
+# The submission hash gate compares the original kit bytes across platforms.
+kit/** text=auto eol=lf
+bots/** text=auto eol=lf
+fixtures/** text=auto eol=lf

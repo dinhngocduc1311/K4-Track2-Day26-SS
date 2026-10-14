@@ -101,7 +101,7 @@ stage 5 shows what that cost. Columns 2 and 5 are the two you are actually score
 make install          # python 3.12, zero third-party deps
 make doctor           # kiểm tra sẵn sàng · readiness check
 make spar BOT=rookie  # đấu với bot dễ nhất · fight the easiest bot
-make ui               # mở màn hình pixel · open the pixel battle view
+make ui               # mở replay mới nhất có events · open the latest recorded replay
 ```
 
 ### ⚠️ Thế giới (corpus) KHÔNG nằm trong repo này · The world is NOT in this repo
@@ -232,7 +232,7 @@ trong cửa sổ nào"** — và mỗi thứ trong đó là một lớp lỗi c�
 
 ```bash
 make test                    # bộ test công khai — đây là conformance check của bạn
-make validate                # deck hợp lệ chưa? 14 lá, cân bằng lớp, lethality band
+make validate                # kiểm tra luật deck; lethality band chỉ có WARN offline
 make submit TEAM=<tên-đội>   # đóng gói agent/ deck/ eval/ thành bundle đã seal
 ```
 
@@ -248,8 +248,8 @@ make submit TEAM=<tên-đội>   # đóng gói agent/ deck/ eval/ thành bundle 
 > *`make qualify` is retired — it called a `qualify.py` that was never written,
 > producing a file nothing reads. `make test` is the conformance check.*
 
-`make qualify` cho bạn **bốn trục độc lập** — Defence, Attack, Prosecution, Integrated — chấm trên
-**cùng một bộ fixture** cho mọi đội. Đó mới là thứ đo được năng lực từng phần; bảng đấu đo cả hệ
-thống dưới áp lực.
+Để kiểm tra từng vai, dùng `make spar BOT=<bot> AS=defender|attacker|prosecutor|all`.
+Đây là trận tập với trace mô phỏng; `make validate` cũng chỉ cảnh báo về
+lethality band, không chứng minh kết quả giải thật.
 
 Đọc `RULES.md` trước khi nộp. Vi phạm hợp đồng = loại bài, không phải trừ điểm.

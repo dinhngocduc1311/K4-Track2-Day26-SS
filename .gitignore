@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 .venv/
+.tools/
 .pytest_cache/
 submissions/*.bundle
 runs/

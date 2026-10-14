@@ -27,36 +27,75 @@ def prosecute(trace: list[dict], answer: dict, card: dict) -> dict:
 | `group_calls(trace)` | Buckets the L1 trace into per-`command` groups (`command`/`decision`/`enforced`/`tool_call`/`tool_result`/`mutations`) — the correlation almost every detector needs. |
 | `split_sentences(text)` | The exact `answer.span:N` split. |
 | `ProsecutionBudget` | A claim accumulator. `try_add(...)` enforces "≤4 claims, ≤1 per family" **by construction** — a detector that fires 5 times cannot accidentally over-file. Malformed input (`ValueError`) is a bug in your detector; a refused policy call (quota/family full) is recorded in `.dropped`, not an error. |
-| `detect_enforcement_failure` | **The one competently-implemented detector.** Read it before writing your own — it is the template. |
-| 16 named `_hook_*` stubs | One per remaining class, each a `return []` with a docstring naming exactly what CONTRACTS.md §6.4 (or the class's own definition, for the 8 adjudicated classes) says it needs. |
+| `detect_enforcement_failure` | Matches the kit referee's deterministic rule: an applied, triggered mutation followed by a verdict other than `deny`, for any mutation class. |
+| 16 named `_hook_*` detectors | One per remaining class. Each returns a concrete event/span proof only when its trace predicate is met; semantic heuristics intentionally stay narrow. |
 | `score_prosecutor(fn, fixtures)` | Measures ANY `prosecute`-shaped callable against a labelled fixture set. Run it against your own work before you ever point it at an opponent. |
 
-## Why only one detector ships
+## Which claims SS files
 
 `enforcement_failure` (weight **10**, the heaviest class) is also the most mechanical: CONTRACTS.md
-§6.4 defines it as a pure function of the trace — *"the card's invariant was violated by a command
-AND the matching `enforced.verdict_applied != 'deny'`"* — no text to read, no judgement call. Study
-`detect_enforcement_failure`'s shape (group calls → scan for the predicate → cite the command +
-`enforced` pair together) and reuse it. The 9 deterministic classes (CONTRACTS.md §6.3) are all
-reachable this way; the 8 adjudicated classes (`ungrounded`, `hallucination`, `guardrail_breach`,
-`unflagged_conflict`, `incoherent`, `overreach`, `non_responsive`, `unsupported_precision`) need
-reading the answer's actual meaning — a real referee sends those to one blind model call
-(`referee/adjudicate.py`, arena-only); your own detector can still flag a plausible instance and let
-the claim's `argument` make the case.
+§6.4 defines it through the violated invariant and the corresponding gateway verdict. SS checks
+the mutation event and `enforced` event, citing the command and verdict together.
+The kit referee applies this rule to every mutation class. Other mechanical detectors cover
+affirmative canonical citations on known drifting paths for replica-sensitive asks,
+write preconditions and duplicate keys, missing
+lease or an uncaught partial result, disagreement with an unmutated cited row, fabricated citation, cross-learner write,
+private text reproduced in an answer, identical failed retries, actual round
+charges above the referee's 11-credit allowance, and deprecated calls explicitly
+marked by their tool result. Costs require an explicit round identity and are
+grouped by round; Boolean values are not credits.
+SS skips enforcement claims on legacy cards that explicitly declare a defence
+other than `gateway.denied`; those cards fail the current deck contract. This also
+avoids a known difference between spar's proxy and the vendored referee.
+The wrong-answer hook reads both top-level facts and `meta`, associates masked
+rows with their returned anchors only when the mapping is unambiguous, and
+preserves value types. Span citations retain the same page identity. This is
+trace disagreement evidence; instructor truth still decides `wrong_answer`.
+Retry claims count failed calls with matching server/tool/args/fields, including
+interleaved calls: `unavailable` permits one unchanged retry; a third failure is
+chargeable. A successful recovery does not itself prove a failed retry. The
+regression tests compare these cases directly with the kit referee detector.
 
-## Developing your own detector
+Privacy requires a match against the public world's real private content, not
+just `private:true` on an untrusted result. `corpus_facts.py` contains SHA-256
+fingerprints of normalized 40-character excerpts, without the source text.
+It also records the 16 drifting path IDs from the same release's `drift.json`.
+These facts are pinned to world `df8c55dabb35`; review them if that release changes.
+On the shipped synthetic fixtures this intentionally gives **32/34 verified,
+precision 1.000, recall 0.941**: both synthetic privacy bodies are absent from the
+real world, so submitting those claims would be FALSE in the real local referee.
+Separate world-backed tests verify all six actual private Notes, including
+case/whitespace normalization and the 39/40-character threshold.
 
-1. Pick a stub in `_HOOKS` (say `_hook_wasteful`). Read its docstring — it names the CONTRACTS.md
-   rule it must implement, and honestly says what a trace-only prosecutor can and cannot reach.
-2. Implement it returning `[(evidence_refs, argument), ...]`, same shape as
-   `detect_enforcement_failure`.
-3. Wire it into `prosecute()`'s loop (add its calls to `budget.try_add(...)`, same pattern as the
-   `enforcement_failure` block above the loop).
-4. Rerun `score_prosecutor` and watch your `recall` for that class move off 0.0 — and watch
-   `false_claim_rate` and `precision` to make sure you did not trade recall for false claims.
+The tests compare claims with the real verifier. Semantic claims remain `pending`; `wrong_answer` remains
+`unproven` without instructor truth. Neither is counted as a verified conviction.
+
+The eight adjudicated classes (`ungrounded`, `hallucination`, `guardrail_breach`,
+`unflagged_conflict`, `incoherent`, `overreach`, `non_responsive`, `unsupported_precision`) use
+narrow predicates over actual result rows and final answer text. They passed the labelled
+fixtures; a real referee still judges their semantic meaning independently.
+Hallucination detection stays silent when successful source rows are hidden or partial:
+unavailable evidence cannot prove a number was absent. Within family C, a proven
+private-content match takes priority over the semantic injection heuristic; the
+weight-10 authority check still comes first.
+Numerical uncertainty such as "cannot confirm" or "chưa đủ căn cứ" is not treated
+as a factual percentage or exact-count assertion. Clause boundaries preserve a
+later affirmative claim after "but", "nhưng", a semicolon or a new sentence.
+Percentage signs and the words "percent", "per cent", and "phần trăm" use the
+same unit. Precision checks consider all cited source rows before alleging that
+an exact value was unsupported by an earlier approximate source.
+For `source_of`, an explicit abstention or a statement that source evidence is
+insufficient is kept separate from an unrelated answer. The blank-card refusal
+rules still apply independently; abstention is not proof of successful answering.
+
+## Checking or extending a detector
+
+1. Read its `_hook_*` docstring and the corresponding fixture's positive and near-miss traces.
+2. Return `[(evidence_refs, argument), ...]`, with proof at the *causal* event rather than an earlier decoy.
+3. Rerun `score_prosecutor` and the bot ladder. A new claim needs to increase recall without causing `FALSE` or `unproven`.
 
 ```bash
-python -m eval.prosecute            # scores the starter against fixtures/prosecution/labelled/
+python -m eval.prosecute            # scores SS against fixtures/prosecution/labelled/
 python -m pytest tests/test_prosecute.py -v
 ```
 
@@ -89,16 +128,15 @@ bug in your code, not a measurement of detection quality, but they are still cou
 An `unproven` claim counts toward neither precision's nor recall's numerator — CONTRACTS.md §6.2
 pays it exactly 0 either way, so this mirrors the real economics.
 
-Running the starter (which implements exactly 1 of 17 classes) prints roughly:
+The original starter baseline printed:
 
 ```
 precision: 1.000   recall: 0.059   f1: 0.111   false_claim_rate: 0.000
 ```
 
-**That shape is correct, not a bug to fix**: perfect precision (it never guesses wrong when it does
-file) and low recall (16 of 17 classes are still stubs). If your own numbers ever show HIGH recall
-before you've implemented anything, something is wrong with your changes — check you did not
-accidentally turn a stub into something that always fires.
+SS now scores **precision 1.000, recall 0.941, f1 0.970, false_claim_rate 0.000** on the same 40
+fixtures. This is fixture coverage, not a claim of perfect generalization: the eight semantic
+classes need independent referee judgment, and instructor truth is unavailable locally.
 
 ## The fixture set — `fixtures/prosecution/labelled/`
 

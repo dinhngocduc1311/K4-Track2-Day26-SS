@@ -1,6 +1,12 @@
 PY := python3.12
 VENV := .venv
 BIN := $(VENV)/bin
+ifeq ($(OS),Windows_NT)
+export PYTHONUTF8 := 1
+PY := python
+BIN := $(VENV)/Scripts
+SHELL := bash
+endif
 BOT ?= rookie
 # `AS` is a GNU make BUILT-IN (the assembler, default `as`), so `AS ?= all`
 # never fired and a plain `make spar BOT=rookie` ran `spar.py --as as`, which
@@ -18,7 +24,7 @@ install:
 	# --seed is REQUIRED: `uv venv` alone creates a venv with no pip, so the very
 	# next line died with "No module named pip" on a fresh clone. The stdlib
 	# fallback seeds pip on its own.
-	uv venv --python 3.12 --seed $(VENV) || $(PY) -m venv $(VENV)
+	uv venv --python 3.12 --seed --allow-existing $(VENV) || $(PY) -m venv $(VENV)
 	$(BIN)/python -m pip install -q --upgrade pip
 	$(BIN)/python -m pip install -q pytest
 	@echo "ready. no api key needed, ever."
@@ -26,9 +32,10 @@ install:
 spar:
 	$(BIN)/python spar.py --bot $(BOT) --as $(ROLE)
 
+UI_RUN = $(shell $(BIN)/python -c "from pathlib import Path; f=max(Path('runs').glob('*/events.jsonl'), key=lambda p:p.stat().st_mtime, default=None); print(f.parent.name if f else '')")
+
 ui:
-	$(BIN)/python -m kit.arena_ui.build_ui
-	$(BIN)/python -m kit.arena_ui.serve --open
+	$(BIN)/python -m kit.arena_ui.serve $(if $(UI_RUN),--run "$(UI_RUN)")
 
 # Always validate against the REAL exported world. Without --world the validator falls
 # back to kit/world/fixture.py's ~40-page synthetic world, where every real anchor fails
@@ -56,8 +63,8 @@ qualify:
 	@echo "Then: make validate && make submit TEAM=<your-team>"
 	@exit 1
 
-# NOT `validate qualify` — qualify is retired (above), and kit.submit REQUIRES
-# --team, which this target never passed, so `make submit` failed twice over.
+# The former submit target depended on qualify and omitted --team.
+# Validate the deck and pass the required team name explicitly.
 submit: validate
 	@test -n "$(TEAM)" || (echo "usage: make submit TEAM=<your-team-name>" && exit 1)
 	$(BIN)/python -m kit.submit --team $(TEAM)
@@ -74,7 +81,7 @@ check-referee:
 # The world artifact is exported by the instructor; without it nothing can run.
 check-world:
 	@ls kit/world/*/manifest.json >/dev/null 2>&1 		|| (echo "no world in kit/world/ - ask your instructor for the world artifact" && exit 1)
-	@$(BIN)/python -c "import json,glob; m=json.load(open(sorted(glob.glob('kit/world/*/manifest.json'))[-1])); 	 print('world', m.get('world_id'), '-', sum(m.get('counts',{}).values()), 'pages')"
+	@$(BIN)/python -c "import json,glob; m=json.load(open(sorted(glob.glob('kit/world/*/manifest.json'))[-1])); c=m.get('counts',{}); 	 print('world', m.get('world_id'), '-', c.get('__total__',sum(c.values())), 'pages')"
 	@! ls kit/world/*/truth.json >/dev/null 2>&1 || (echo "FAIL: truth.json must never ship to students" && exit 1)
 
 doctor: check-no-key check-world check-referee validate

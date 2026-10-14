@@ -6,9 +6,9 @@ classes (CONTRACTS.md section 6.1) each one can save you from.
     gateway.py      the control plane: Gateway.decide(cmd) -> Decision
                      (CONTRACTS.md section 4, exactly)
     strategy.py      discovery / delegation / caching / replica / budget
-                     policy — building blocks, not wired in by default
-    guardrails.py    grounding (real), injection/redaction/arithmetic
-                     (named stubs), abstention (real, naive)
+                     policy — helpers used by gateway and optional planning
+    guardrails.py    grounding, injection/redaction/arithmetic, abstention,
+                     prepare_answer and the guarded environment boundary
     telemetry.py     ctx.emit wrappers — your own side only, never scored
     prompt.md        the system prompt LAYERED ON TOP of kit.loop.prompt's
                      harness prompt (not a replacement for it)
@@ -31,10 +31,12 @@ from agent.gateway import Command, Decision, Gateway, GatewayContext
 from agent.guardrails import (
     ArithmeticCheckResult,
     GroundingResult,
+    GuardedEnvironment,
     InjectionScanResult,
     RedactionResult,
     abstention_policy,
     check_grounding,
+    prepare_answer,
     redact,
     scan_for_injected_instructions,
     verify_arithmetic,
@@ -69,6 +71,8 @@ __all__ = [
     "ArithmeticCheckResult",
     "verify_arithmetic",
     "abstention_policy",
+    "prepare_answer",
+    "GuardedEnvironment",
     # strategy.py
     "BudgetPacer",
     "ReplicaChoice",

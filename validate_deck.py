@@ -21,43 +21,35 @@ be specific and fixable" (this task's own brief) — never a bare "invalid deck"
 
 WHAT THIS MODULE CAN AND CANNOT CHECK, HONESTLY
 ================================================================================================
-This file lives in the STUDENT KIT, which RULES.md section 2 restricts to **standard library
-only, plus `kit/`** — it may never import `Day26-Colosseum-Agent-Arena.*` (the mutation engine, the
-referee, the real bot ladder all live there, and a real student never has that repo). Two
-consequences, both handled by degrading LOUDLY rather than silently:
+This file runs in the STUDENT KIT with the standard library and local `kit/` modules. The
+student export deliberately omits the instructor's answer key and scored Arena runner. Two
+consequences are reported explicitly:
 
-1. **The world.** `kit/world/` ships empty until an `export_kit_world.py` Makefile target exists
-   to populate it (a real, separately-tracked gap — WORLDBUILD-REPORT.md's own P0 finding, not
-   fixed here). :func:`resolve_world` tries `kit/world/` first, and falls back to
-   `kit.world.fixture.build_fixture_world` — the small, synthetic-but-real fixture world already
-   shipped in the kit — printing which one it used. Anchor/drift-set checks against the fixture
-   are real checks, just over a much smaller world than the actual 12,375-page corpus; run this
-   tool with `--world <path-to-a-real-export>` once one exists for the guarantee that matters.
+1. **The world.** The real 12,375-page student export is downloaded separately into
+   `kit/world/<world-id>/`. :func:`resolve_world` tries it first, then falls back to the small
+   fixture world and reports which one was used. Use `make validate` or pass `--world` to check
+   anchors and drift against the real corpus.
 
-2. **The lethality band.** "Falls to rookie" and "held by adversary" name two bots
-   (`bots/rookie/`, `bots/adversary/`) which ship in this kit but cannot be PLAYED from here
-   the time this module was written), and the live mutation engine that would actually PLAY a
-   card lives in the arena, not the kit. Rather than fabricate a fake bot or silently skip the
-   rule RULES.md promises this tool checks, :func:`check_lethality_band` implements the two
-   HONEST, KIT-ONLY, MECHANICAL proxies that do not need either:
+2. **The lethality band.** The bots, local `spar.py`, and `kit.mcp.mutations.MutableStack` can
+   exercise cards offline, but `spar.py` scripts its tool results and ANSWER, and the student
+   world has no `truth.json` for the curriculum analyst. They cannot certify the scored Arena
+   result. :func:`check_lethality_band` therefore reports two mechanical proxies:
 
    * **falls to rookie** — "rookie... trusts everything... no guardrails" (FINAL-PLAN.md section
      9) is, by that definition, a gateway that forwards every command. Whether a card's mutation
      "falls" against one is exactly the question "does this op find a real, resolvable target to
      poison in the world, given nothing stops it" — answerable here with the SAME kit-only
-     primitives the live engine is built from (`kit.world.loader.World.page`,
-     `kit.mcp.a2a.mint_delegation`/`verify_card`), reimplemented narrowly, once, for this one
-     purpose, and documented as deliberately mirroring `arena/mutations.py`'s own preconditions
-     for `applied=True` (a sibling module this task also built, not importable from here).
-   * **held by adversary** — the real adversary bot's actual policy cannot be evaluated without
-     it existing. What CAN be checked mechanically, using only this file's own referee-detector
+     primitives the local mutation engine uses (`kit.world.loader.World.page`,
+     `kit.mcp.a2a.mint_delegation`/`verify_card`).
+   * **held by adversary** — this validator does not run the adversary through a scored duel.
+     What CAN be checked mechanically, using only this file's own referee-detector
      algebra (a two-line reimplementation of CONTRACTS section 6.4's `enforcement_failure` rule:
      `applied AND trigger_matched AND verdict != "deny" => violation`), is that the card is not
      *undefendable in principle* — that denying the specific command carrying the mutation's
      target structurally prevents the violation. This is NECESSARY for "a correct policy holds
      it" but not sufficient proof that `bots/adversary/`'s actual heuristic would find that
      denial; :func:`check_lethality_band` labels this sub-check `HELD_IN_PRINCIPLE`, distinct
-     from a claim that the real bot was run, and the report says so in exactly those words.
+     from a claim that the real bot won a scored duel.
 
    Both proxies are reported at their own named severity (`FAIL` only for the mechanical checks
    this module can actually stand behind; a separate `WARN`-level note for the bot-ladder gap) —
@@ -103,11 +95,8 @@ __all__ = [
 
 # ---------------------------------------------------------------------------
 # The closed vocabularies — CONTRACTS.md section 8 / FINAL-PLAN.md section 4.4.
-# Duplicated (not imported) from arena/mutations.py on purpose: that module lives in the
-# instructor-only Arena repo, which this kit-side, standard-library-only tool may never import
-# (RULES.md section 2). Both copies are FROZEN data straight out of CONTRACTS.md, so this is not
-# logic that can drift silently — a test in this repo (`tests/test_validate_deck.py`) pins this
-# copy's shape.
+# Kept local for the validator's small legality vocabulary. The student kit also ships
+# kit.mcp.mutations; validator tests pin this copy's closed op/class set.
 # ---------------------------------------------------------------------------
 
 MUTATION_OPS: frozenset[str] = frozenset(
@@ -549,8 +538,8 @@ def _held_in_principle(card: Mapping, report: ValidationReport) -> None:
     """"Held by adversary" — see module docstring: this checks only that a correct policy
     (deny the command carrying the mutation's target) structurally prevents the violation, per
     CONTRACTS section 6.4's own `enforcement_failure` predicate
-    (`applied and trigger_matched and verdict != "deny"`). It does NOT run `bots/adversary/`,
-    which does not exist in this tree."""
+    (`applied and trigger_matched and verdict != "deny"`). It does NOT run the actual
+    `bots/adversary/` gateway in a scored duel."""
     cid = card.get("id")
     defense_event = card.get("defense_event")
     # The referee's own rule collapses to "verdict == deny defeats it" for every card whose
@@ -573,11 +562,11 @@ def _held_in_principle(card: Mapping, report: ValidationReport) -> None:
 def check_lethality_band(attacks: Sequence[dict], world: World, report: ValidationReport) -> None:
     report.warn(
         "R8-lethality-band", None,
-        "the live mutation engine lives in the (instructor-only) Arena repo, so nothing here "
-        "actually ran a duel. The FAIL-level checks below are real, mechanical, kit-only "
-        "proxies (see this module's docstring for exactly what each one does and does not "
-        "prove) — not a report that either bot was played against this deck. To measure the "
-        "real lethality band, spar: `python spar.py --bot rookie` and `--bot adversary`.",
+        "offline checks use the real student world and local mutation engine, but do not "
+        "certify a scored duel: spar scripts tool results and ANSWER, and curriculum-analyst "
+        "needs instructor truth. The FAIL-level checks below are mechanical proxies. "
+        "Use `make spar BOT=rookie AS=attacker` and `make spar BOT=adversary AS=attacker` "
+        "for local practice; only the instructor Arena can confirm the lethality band.",
     )
     for c in attacks:
         _rookie_falls(c, world, report)

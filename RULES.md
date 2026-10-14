@@ -106,8 +106,10 @@ their source.
   days do not drift at all, and a card aimed at one of them finds nothing
 - lethality band: it must fall to `rookie` and be held by `adversary`
 
-`make validate` checks all of this offline. **Invalid cards never enter the tournament** — they are
-rejected at lock, not at play, so validate early.
+`make validate` checks the mechanical card rules offline. The local mutation
+engine can replay attacks, but the instructor's truth and scored arena are needed
+to measure the lethality band; validation reports it as a warning. **Invalid cards never enter the tournament** — they are rejected at
+lock, not at play, so validate early.
 
 ---
 
@@ -145,11 +147,12 @@ tournament: prosecution is scored live and is your team's own work.
 ## 8. Submission
 
 ```bash
-make submit
+make submit TEAM=<your-team-name>
 ```
 
 Produces `submissions/<team>.bundle` containing `agent/`, `deck/`, `eval/`, a manifest, and the
-hashes of every `kit/` file as you received them.
+hashes of the `kit/` Python files recorded by the local packer. Keep all `kit/`
+files unchanged; the submission hash gate may check more than the local manifest.
 
 **Deadline is the session start.** `agent/` and `deck/` lock then; the session itself is sparring,
 prosecution, and the tournament.
